@@ -10,7 +10,7 @@
   * Understand *pointers
 */
 
-pcb_t pcb[3], *current = NULL;
+pcb_t pcb[1], *current = NULL;
 
 /* Scheduler function (algorithm). Currently special purpose for 3 user
    programs. It checks which process is active, and performs a context
@@ -22,7 +22,12 @@ pcb_t pcb[3], *current = NULL;
 */
 
 void scheduler (ctx_t* ctx) {
+	PL011_putc( UART0, 's', true );
+
+	//Call next one and link round when hitting sizeof&pcb... acll //fork when necessary
+
 	if (current == &pcb[0]) {
+
 		memcpy(&pcb[0].ctx, ctx, sizeof(ctx_t)); //preserve P3
         memcpy(ctx, &pcb[1].ctx, sizeof(ctx_t)); //restore  P3
         current = &pcb[1];
@@ -37,6 +42,8 @@ void scheduler (ctx_t* ctx) {
         memcpy(ctx, &pcb[0].ctx, sizeof(ctx_t)); //restore  P5
         current = &pcb[0];
     }
+
+
     return;
 }
 
@@ -47,12 +54,13 @@ void scheduler (ctx_t* ctx) {
 
 
 extern void main_console();
-extern void main_P3();
-extern uint32_t tos_P3;
-extern void main_P4();
-extern uint32_t tos_P4;
-extern void main_P5();
-extern uint32_t tos_P5;
+extern uint32_t tos_console;
+//extern void main_P3();
+//extern uint32_t tos_P3;
+//extern void main_P4();
+//extern uint32_t tos_P4;
+//extern void main_P5();
+//extern uint32_t tos_P5;
 
 /* Initialise the process table by copying information into two PCBs, one for
    each user program; in each case the PCB is first zero'd by memset and then
@@ -80,23 +88,30 @@ void hilevel_handler_rst(ctx_t* ctx) {
 	/* Initialise PCBs... CPSR value of 0x50 means the processor is switched 	into the USR mode, with IRQ interrupts enabled, and the PC and SP values match the entry point and top of stack.
 	*/
 
-    memset(&pcb[0], 0, sizeof(pcb_t));
-    pcb[0].pid      = 1;
-    pcb[0].ctx.cpsr = 0x50;
-    pcb[0].ctx.pc   = (uint32_t)(&main_P3);
-    pcb[0].ctx.sp   = (uint32_t)(&tos_P3);
 
-    memset(&pcb[1], 0, sizeof(pcb_t));
-    pcb[1].pid      = 2;
-    pcb[1].ctx.cpsr = 0x50;
-    pcb[1].ctx.pc   = (uint32_t)(&main_P4);
-    pcb[1].ctx.sp   = (uint32_t)(&tos_P4);
-
-    memset(&pcb[2], 0, sizeof(pcb_t));
-    pcb[2].pid      = 3;
-    pcb[2].ctx.cpsr = 0x50;
-    pcb[2].ctx.pc   = (uint32_t)(&main_P5);
-    pcb[2].ctx.sp   = (uint32_t)(&tos_P5);
+     memset(&pcb[1], 0, sizeof(pcb_t));
+     pcb[0].pid      = 4;
+     pcb[0].ctx.cpsr = 0x50;
+     pcb[0].ctx.pc   = (uint32_t)(&main_console);
+	 pcb[0].ctx.sp   = (uint32_t)(&tos_console);
+	//
+	// memset(&pcb[0], 0, sizeof(pcb_t));
+    // pcb[0].pid      = 1;
+    // pcb[0].ctx.cpsr = 0x50;
+    // pcb[0].ctx.pc   = (uint32_t)(&main_P3);
+    // pcb[0].ctx.sp   = (uint32_t)(&tos_P3);
+	//
+    // memset(&pcb[1], 0, sizeof(pcb_t));
+    // pcb[1].pid      = 2;
+    // pcb[1].ctx.cpsr = 0x50;
+    // pcb[1].ctx.pc   = (uint32_t)(&main_P4);
+    // pcb[1].ctx.sp   = (uint32_t)(&tos_P4);
+	//
+    // memset(&pcb[2], 0, sizeof(pcb_t));
+    // pcb[2].pid      = 3;
+    // pcb[2].ctx.cpsr = 0x50;
+    // pcb[2].ctx.pc   = (uint32_t)(&main_P5);
+    // pcb[2].ctx.sp   = (uint32_t)(&tos_P5);
 
     /* Line below then selects a PCB entry (in this case the 0-th entry), and
        activates it: 'memcpy' copies the execution context to addresses pointed
@@ -169,7 +184,8 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
         ctx->gpr[ 0 ] = n;
         break;
       }
-      case 0x02 : { // 0x02 => read( fd, x, n )
+      /* Get rid??
+	  case 0x02 : { // 0x02 => read( fd, x, n )
       int   fd = ( int   )( ctx->gpr[ 0 ] );
       char*  x = ( char* )( ctx->gpr[ 1 ] );
       int    n = ( int   )( ctx->gpr[ 2 ] );
@@ -177,13 +193,47 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
       for( int i = 0; i < n; i++ ) {
         *x++ = PL011_getc( UART0, true );
 
-      }
-
-
+	}
       ctx->gpr[ 0 ] = n;
       break;
     }
 
+	*/
+	  case 0x03 : { // 0x04 => fork()
+		  //get old pcb size + 1
+		  //memset
+		  //pid and cpsr
+		  //allocate memory and get sp to top
+		  int oldSize = sizeof(&pcb);
+  		  int newSize = oldSize + 1;
+		  pcb_t oldpcb[oldSize];
+
+		  for (int i = 0; i < oldSize; i++) {
+			  oldpcb[i] = &pcb[i];
+		  }
+
+		  pcb_t pcb[newSize];
+		  for (int j = 0; j < newSize; j++) {
+			  oldpcb[j] = &pcb[j];
+		  }
+
+
+
+		  //Set new block
+		  memset(&pcb[newSize], 0, sizeof(pcb_t));
+	      pcb[2].pid      = newSize;
+	      pcb[2].ctx.cpsr = 0x50;
+		  //Program Counter
+	      pcb[2].ctx.pc   = (uint32_t)(&main_P5);
+		  //Stack Pointer
+	      pcb[2].ctx.sp   = (uint32_t)(&tos_P5);
+
+
+ 	  }
+	  case 0x05 ; {
+		  //exec
+	  }
+	  //
       default   : { // 0x?? => unknown/unsupported
         break;
       }
