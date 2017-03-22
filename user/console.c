@@ -57,7 +57,8 @@ void* load( char* x ) {
 
 void main_console() {
   char* p, x[ 1024 ];
-  //write( STDOUT_FILENO, "000", 3 );
+  PL011_putc( UART0, 'c', true );
+
   while( 1 ) {
     puts( "shell$ ", 7 ); gets( x, 1024 ); p = strtok( x, " " );
 
