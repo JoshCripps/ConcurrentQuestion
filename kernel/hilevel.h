@@ -40,6 +40,7 @@ typedef struct {
 typedef struct {
   pid_t pid;
   ctx_t ctx;
+  bool spaceAvailable;
 } pcb_t;
 
 #endif

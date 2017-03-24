@@ -15,16 +15,11 @@ SECTIONS {
   /* allocate stack for svc mode     */
   .       = . + 0x00001000;
   tos_svc = .;
-  /* allocate stack for P3     */
-  .       = . + 0x00001000;
-  tos_P3 = .;
-  /* allocate stack for P4     */
-  .       = . + 0x00001000;
-  tos_P4 = .;
-  /* allocate stack for P5     */
-  .       = . + 0x00001000;
-  tos_P5 = .;
   /* allocate stack for console     */
   .       = . + 0x00001000;
   tos_console = .;
+  /* allocate stack for Processors     */
+  .       = . + 0x00011000;
+  tos_processor = .;
+
 }
