@@ -246,6 +246,7 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			//Want to return pc to previous Program
 			// * WHY does 0 matter?
 			pcb[nextFreeSpace].spaceAvailable = true;
+			scheduler(ctx);
 
 			break;
 		}
@@ -254,11 +255,22 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			//Program Counter line and something else
 			//uint32_t address = (ctx->gpr[0]);
 			//ctx->pc = address;
-			ctx->pc	= ctx->gpr[0];
-			current = &pcb[nextFreeSpace];
+			current->ctx.cpsr = 0x50;
+			current->ctx.pc   = ctx->gpr[0];
+			//Is this line pointless, Aleena redefines pointless in a profound manner
+			current->ctx.sp   = (uint32_t)(&(tos_userSpace) + ((current->pid) * 0x00001000));
+			memcpy(ctx, &current->ctx, sizeof(ctx_t));
+			break;
+		}
+		case 0x07 : {
 
+			pcb[nextFreeSpace].basePriority	= ctx->gpr[0];
+			PL011_putc( UART0, 'p', true);
+			PL011_putc( UART0, 'r', true);
+			PL011_putc( UART0, 'i', true);
+			PL011_putc( UART0, '0'+ctx->gpr[0], true);
 			//Added this... is that calm?
-			currentUsedSpace = nextFreeSpace;
+			break;
 
 		}
 		//

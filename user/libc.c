@@ -62,7 +62,7 @@ int write( int fd, const void* x, size_t n ) {
                 "mov r2, %4 \n" // assign r2 =  n
                 "svc %1     \n" // make system call SYS_WRITE
                 "mov %0, r0 \n" // assign r  = r0
-              : "=r" (r) 
+              : "=r" (r)
               : "I" (SYS_WRITE), "r" (fd), "r" (x), "r" (n)
               : "r0", "r1", "r2" );
 
@@ -77,8 +77,8 @@ int  read( int fd,       void* x, size_t n ) {
                 "mov r2, %4 \n" // assign r2 =  n
                 "svc %1     \n" // make system call SYS_READ
                 "mov %0, r0 \n" // assign r  = r0
-              : "=r" (r) 
-              : "I" (SYS_READ),  "r" (fd), "r" (x), "r" (n) 
+              : "=r" (r)
+              : "I" (SYS_READ),  "r" (fd), "r" (x), "r" (n)
               : "r0", "r1", "r2" );
 
   return r;
@@ -88,8 +88,8 @@ int fork() {
   int r;
 
   asm volatile( "svc %1     \n" // make system call SYS_FORK
-                "mov %0, r0 \n" // assign r  = r0 
-              : "=r" (r) 
+                "mov %0, r0 \n" // assign r  = r0
+              : "=r" (r)
               : "I" (SYS_FORK)
               : "r0" );
 
@@ -116,6 +116,16 @@ void exec( const void* x ) {
   return;
 }
 
+void setPri( int x ) {
+  asm volatile( "mov r0, %1 \n" // assign r0 = x
+                "svc %0     \n" // make system call SYS_SETPRI
+              :
+              : "I" (SYS_SETPRI), "r" (x)
+              : "r0" );
+
+  return;
+}
+
 int kill( int pid, int x ) {
   int r;
 
@@ -123,7 +133,7 @@ int kill( int pid, int x ) {
                 "mov r1, %3 \n" // assign r1 =    x
                 "svc %1     \n" // make system call SYS_KILL
                 "mov %0, r0 \n" // assign r0 =    r
-              : "=r" (r) 
+              : "=r" (r)
               : "I" (SYS_KILL), "r" (pid), "r" (x)
               : "r0", "r1" );
 

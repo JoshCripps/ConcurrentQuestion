@@ -55,6 +55,23 @@ void* load( char* x ) {
  * 3. execute whatever steps the command dictates.
  */
 
+ int getPriority( char* x ) {
+     if (x == NULL) {
+         return 1;
+     }
+    int y = atoi( x );
+    PL011_putc( UART0, 'c', true );
+    PL011_putc( UART0, 'h', true );
+    PL011_putc( UART0, 'a', true );
+    PL011_putc( UART0, 'r', true );
+    PL011_putc( UART0, '0'+y, true );
+
+    if (y < 0) {
+        return 1;
+    }
+    else return y;
+}
+
 void main_console() {
   char* p, x[ 1024 ];
   PL011_putc( UART0, 'c', true );
@@ -67,6 +84,10 @@ void main_console() {
 
       if( 0 == pid ) {
         void* addr = load( strtok( NULL, " " ) );
+        int prio = getPriority( strtok( NULL, " " ) );
+        setPri( prio );
+
+        //Andrew says returning from exec shouldnt return - scary
         exec( addr );
       }
 }
