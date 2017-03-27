@@ -20,6 +20,6 @@ SECTIONS {
   tos_console = .;
   /* allocate stack for Processors     */
   .       = . + 0x00011000;
-  tos_processor = .;
+  tos_userSpace = .;
 
 }

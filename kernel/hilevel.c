@@ -9,9 +9,23 @@ maintained so it is clear which PCB is active (the process currently
 running)
 * Understand *pointers
 */
+#define PROCESSORS_MAX 17
+//#define TIMER_PERIOD 0x00100000
+pcb_t pcb[PROCESSORS_MAX], *current = NULL;
+int nextFreeSpace;
+int currentUsedSpace = 0;
+int nextUsedSpace;
 
-pcb_t pcb[1], *current = NULL;
-int nextSpace;
+
+
+/* Iterate through the pcb and return the index of the first available space in the array */
+int getNextSpace() {
+	for (int i = 0; i < PROCESSORS_MAX; i++) {
+		if (pcb[i].spaceAvailable) {
+			return i;
+		}
+	}
+}
 
 /* Scheduler function (algorithm). Currently special purpose for 3 user
 programs. It checks which process is active, and performs a context
@@ -21,14 +35,6 @@ into place, before updating 'current' to refelct new active PCB.
 * Understand &pointers
 * PCB?
 */
-
-int getNextSpace() {
-	for (int i = 0; i < sizeof(pcb); i++) {
-		if (pcb[i].spaceAvailable) {
-			return i;
-		}
-	}
-}
 
 //Check if process is alive and wants to be run
 
@@ -40,7 +46,7 @@ void scheduler (ctx_t* ctx) {
 
 	//	if (current == &pcb[0]) {
 	// 	memcpy(&pcb[0].ctx, ctx, sizeof(ctx_t)); //preserve P3
-	//     memcpy(ctx, &pcb[1].ctx, sizeof(ctx_t)); //restore  P3
+	//  memcpy(ctx, &pcb[1].ctx, sizeof(ctx_t)); //restore  P3
 	//     current = &pcb[1];
 	// }
 	// else if (current == &pcb[1]) {
@@ -54,14 +60,25 @@ void scheduler (ctx_t* ctx) {
 	//     current = &pcb[0];
 	// }
 
-		for(int i = nextSpace; i < sizeof(pcb); i++){
-			if(!(pcb[(i+1)%sizeof(pcb)].spaceAvailable)) {
-				current = &(pcb[i+1%sizeof(pcb)]);
+		for(int i = currentUsedSpace; i < (currentUsedSpace+PROCESSORS_MAX); i++){
+			//if space used
+
+			if(!(pcb[(i+1)%PROCESSORS_MAX].spaceAvailable)) {
+				PL011_putc( UART0, '0'+currentUsedSpace, true);
+				nextUsedSpace = ((i+1)%PROCESSORS_MAX);
+				PL011_putc( UART0, '0'+nextUsedSpace, true);
+
+				memcpy(&pcb[currentUsedSpace].ctx, ctx, sizeof(ctx_t)); //preserve P3
+				memcpy(ctx, &pcb[nextUsedSpace].ctx, sizeof(ctx_t)); //restore  P3
+
+				//current = &(pcb[i+1%sizeof(pcb)]);
+				current = &(pcb[nextUsedSpace]);
+				currentUsedSpace=nextUsedSpace;
+
+
 				break;
 			}
 		}
-
-
 	return;
 }
 
@@ -73,12 +90,8 @@ tos_P3/4/5 function is called in image.ld and allocates space for functions
 
 extern void main_console();
 extern uint32_t tos_console;
-//extern void main_P3();
-//extern uint32_t tos_P3;
-//extern void main_P4();
-//extern uint32_t tos_P4;
-//extern void main_P5();
-//extern uint32_t tos_P5;
+extern uint32_t tos_userSpace;
+
 
 /* Initialise the process table by copying information into two PCBs, one for
 each user program; in each case the PCB is first zero'd by memset and then
@@ -87,6 +100,7 @@ of the entry point, e.g main_P3)
 */
 
 void hilevel_handler_rst(ctx_t* ctx) {
+	PL011_putc( UART0, 'R', true);
 
 
 	// Timer stuff
@@ -108,6 +122,9 @@ void hilevel_handler_rst(ctx_t* ctx) {
 
 
 	memset(&pcb[0], 0, sizeof(pcb_t));
+	for (int i = 0; i < PROCESSORS_MAX; i++) {
+		pcb[i].spaceAvailable = true;
+	}
 	pcb[0].pid      = 1;
 	pcb[0].ctx.cpsr = 0x50;
 	pcb[0].ctx.pc   = (uint32_t)(&main_console);
@@ -156,8 +173,8 @@ void hilevel_handler_irq(ctx_t* ctx) {
 	// Step 4: handle the interrupt, then clear (or reset) the source.
 
 	if( id == GIC_SOURCE_TIMER0 ) {
-		scheduler(ctx);
 		PL011_putc( UART0, 'T', true ); TIMER0->Timer1IntClr = 0x01;
+		scheduler(ctx);
 
 	}
 
@@ -204,24 +221,32 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			break;
 		}
 		case 0x03 : { // 0x04 => fork()
-			nextSpace = getNextSpace();
+			nextFreeSpace = getNextSpace();
 
-			memset(&pcb[nextSpace], 0, sizeof(pcb_t));
-			pcb[nextSpace].pid      = nextSpace+1;
-			pcb[nextSpace].ctx.cpsr = 0x50;
-			pcb[nextSpace].ctx.pc   = ((uint32_t)(&main_console));
-			pcb[nextSpace].ctx.sp   = ((nextSpace+1) * 0x00001000);
-			//Why does this make sense
+			//should this be 0? like eventually should be changed no?
+			memset(&pcb[nextFreeSpace], 0, sizeof(pcb_t));
+			memcpy(&pcb[nextFreeSpace].ctx, ctx, sizeof(ctx_t)); //Preservey
+			pcb[nextFreeSpace].pid      = nextFreeSpace+1;
+			pcb[nextFreeSpace].ctx.cpsr = 0x50;
+			//pcb[nextFreeSpace].ctx.pc   = (uint32_t)(&main_console);
+			//May be a '-'?
+			pcb[nextFreeSpace].ctx.sp   = (uint32_t)(&(tos_userSpace) + ((nextFreeSpace+1) * 0x00001000));
+			pcb[nextFreeSpace].spaceAvailable = false;
 
-			ctx->gpr[0] = (nextSpace + 1);
-			ctx->gpr[0] = 0;
+			ctx->gpr[0] = (nextFreeSpace + 1);
+			pcb[nextFreeSpace].ctx.gpr[0] = 0;
 			break;
 		}
 
 		case 0x05 : {
 			//Program Counter line and something else
+			//uint32_t address = (ctx->gpr[0]);
+			//ctx->pc = address;
 			ctx->pc	= ctx->gpr[0];
-			current = &pcb[nextSpace];
+			current = &pcb[nextFreeSpace];
+
+			//Added this... is that calm?
+			currentUsedSpace = nextFreeSpace;
 
 		}
 		//
