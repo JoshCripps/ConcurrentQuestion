@@ -237,6 +237,18 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			pcb[nextFreeSpace].ctx.gpr[0] = 0;
 			break;
 		}
+		case 0x04 : {
+			/* Perform normal termination, invoke call-backs, flush then close
+			open files, pass exit status to parent process (via wait)... in lib.c
+			it takes in int x, assign it to r0, make system call exit then return
+			*/
+			// it says exit ( EXIT_SUCCESS ) which == 0
+			//Want to return pc to previous Program
+			// * WHY does 0 matter?
+			pcb[nextFreeSpace].spaceAvailable = true;
+
+			break;
+		}
 
 		case 0x05 : {
 			//Program Counter line and something else
