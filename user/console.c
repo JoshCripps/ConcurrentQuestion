@@ -60,11 +60,6 @@ void* load( char* x ) {
          return 1;
      }
     int y = atoi( x );
-    PL011_putc( UART0, 'c', true );
-    PL011_putc( UART0, 'h', true );
-    PL011_putc( UART0, 'a', true );
-    PL011_putc( UART0, 'r', true );
-    PL011_putc( UART0, '0'+y, true );
 
     if (y < 0) {
         return 1;
@@ -83,13 +78,21 @@ void main_console() {
       pid_t pid = fork();
 
       if( 0 == pid ) {
+          // child
         void* addr = load( strtok( NULL, " " ) );
         int prio = getPriority( strtok( NULL, " " ) );
-        setPri( prio );
+        PL011_putc( UART0, 'P', true );
+        PL011_putc( UART0, 'r', true );
+        PL011_putc( UART0, 'i', true );
+        PL011_putc( UART0, '0'+prio, true );
+        //Andrew says returning from exec shouldnt return - scary = sorted
+        exec( addr, prio);
+    } //else {
+    //     // parent
+    //     setPriority(pid, prio);
+    //   }
 
-        //Andrew says returning from exec shouldnt return - scary
-        exec( addr );
-      }
+
 }
     else if( 0 == strcmp( p, "kill" ) ) {
       pid_t pid = atoi( strtok( NULL, " " ) );

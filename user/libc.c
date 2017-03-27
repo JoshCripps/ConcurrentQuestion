@@ -106,25 +106,17 @@ void exit( int x ) {
   return;
 }
 
-void exec( const void* x ) {
+void exec( const void* x , int y ) {
   asm volatile( "mov r0, %1 \n" // assign r0 = x
+                "mov r1, %2 \n" // assign r1 = y
                 "svc %0     \n" // make system call SYS_EXEC
               :
-              : "I" (SYS_EXEC), "r" (x)
-              : "r0" );
+              : "I" (SYS_EXEC), "r" (x), "r" (y)
+              : "r0", "r1");
 
   return;
 }
 
-void setPri( int x ) {
-  asm volatile( "mov r0, %1 \n" // assign r0 = x
-                "svc %0     \n" // make system call SYS_SETPRI
-              :
-              : "I" (SYS_SETPRI), "r" (x)
-              : "r0" );
-
-  return;
-}
 
 int kill( int pid, int x ) {
   int r;

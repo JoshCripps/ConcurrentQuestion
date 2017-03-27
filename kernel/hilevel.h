@@ -41,8 +41,9 @@ typedef struct {
   pid_t pid;
   ctx_t ctx;
   bool spaceAvailable;
-  uint32_t basePriority;
+  uint32_t base;
   uint32_t vintage;
+  uint32_t priority;
 } pcb_t;
 
 #endif

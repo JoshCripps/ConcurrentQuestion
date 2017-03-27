@@ -27,6 +27,33 @@ int getNextSpace() {
 	}
 }
 
+// DOES CONSOLE HAVE A PRIORITY?
+int chooseProcess() {
+	PL011_putc( UART0, ' ', true );
+	int max = -1;
+	int max_priority = 0;
+	for (size_t i = 0; i < PROCESSORS_MAX; i++) {
+		if (!(pcb[i].spaceAvailable)) {
+			//Initially calculate priority
+			pcb[i].priority = (pcb[i].vintage + pcb[i].base);
+
+			if (max_priority < pcb[i].priority) {
+				//If bigger than current max, replace it, and set vintage to 0
+				max = i;
+				max_priority = pcb[i].priority;
+			}
+			pcb[i].vintage = pcb[i].vintage + 1;
+			 PL011_putc( UART0, 'P', true );
+			 PL011_putc( UART0, '0'+i, true );
+			 PL011_putc( UART0, '=', true );
+			 PL011_putc( UART0, '0'+pcb[i].priority, true );
+		}
+	}
+	pcb[max].vintage = 0;
+	PL011_putc( UART0, ' ', true );
+	return max;
+}
+
 /* Scheduler function (algorithm). Currently special purpose for 3 user
 programs. It checks which process is active, and performs a context
 switch to suspend it and resume the next one in a simple round-robin
@@ -36,49 +63,43 @@ into place, before updating 'current' to refelct new active PCB.
 * PCB?
 */
 
+
+
 //Check if process is alive and wants to be run
 
 void scheduler (ctx_t* ctx) {
 	PL011_putc( UART0, 's', true );
 
+	int nextProcess = chooseProcess();
+	if (nextProcess < 0) {
+		PL011_putc(UART0, '#', true);
+	}
+	PL011_putc( UART0, '0'+currentUsedSpace, true);
+	PL011_putc( UART0, '0'+nextProcess, true);
+	memcpy(&pcb[currentUsedSpace].ctx, ctx, sizeof(ctx_t));
+	memcpy(ctx, &pcb[nextProcess].ctx, sizeof(ctx_t)); //restore
+	current = &(pcb[nextProcess]);
+	currentUsedSpace = nextProcess;
+
+
+
 	//Call next one and link round when hitting sizeof&pcb... acll //fork when necessary
 
-
-	//	if (current == &pcb[0]) {
-	// 	memcpy(&pcb[0].ctx, ctx, sizeof(ctx_t)); //preserve P3
-	//  memcpy(ctx, &pcb[1].ctx, sizeof(ctx_t)); //restore  P3
-	//     current = &pcb[1];
-	// }
-	// else if (current == &pcb[1]) {
-	// 	memcpy(&pcb[1].ctx, ctx, sizeof(ctx_t)); //preserve P4
-	//     memcpy(ctx, &pcb[2].ctx, sizeof(ctx_t)); //restore  P4
-	//     current = &pcb[2];
-	// }
-	// else if (current == &pcb[2]) {
-	// 	memcpy(&pcb[2].ctx, ctx, sizeof(ctx_t)); //preserve P5
-	//     memcpy(ctx, &pcb[0].ctx, sizeof(ctx_t)); //restore  P5
-	//     current = &pcb[0];
-	// }
-
-		for(int i = currentUsedSpace; i < (currentUsedSpace+PROCESSORS_MAX); i++){
-			//if space used
-
+		/*for(int i = currentUsedSpace; i < (currentUsedSpace+PROCESSORS_MAX); i++){
+			//If next space is used, switch to that space
 			if(!(pcb[(i+1)%PROCESSORS_MAX].spaceAvailable)) {
 				PL011_putc( UART0, '0'+currentUsedSpace, true);
 				nextUsedSpace = ((i+1)%PROCESSORS_MAX);
 				PL011_putc( UART0, '0'+nextUsedSpace, true);
-
 				memcpy(&pcb[currentUsedSpace].ctx, ctx, sizeof(ctx_t)); //preserve P3
 				memcpy(ctx, &pcb[nextUsedSpace].ctx, sizeof(ctx_t)); //restore  P3
-
 				//current = &(pcb[i+1%sizeof(pcb)]);
 				current = &(pcb[nextUsedSpace]);
 				currentUsedSpace=nextUsedSpace;
-
-
 				break;
 			}
-		}
+		}*/
+
 	return;
 }
 
@@ -101,6 +122,8 @@ of the entry point, e.g main_P3)
 
 void hilevel_handler_rst(ctx_t* ctx) {
 	PL011_putc( UART0, 'R', true);
+	PL011_putc( UART0, '\n', true);
+	PL011_putc( UART0, '\n', true);
 
 
 	// Timer stuff
@@ -130,6 +153,9 @@ void hilevel_handler_rst(ctx_t* ctx) {
 	pcb[0].ctx.pc   = (uint32_t)(&main_console);
 	pcb[0].ctx.sp   = (uint32_t)(&tos_console);
 	pcb[0].spaceAvailable = false;
+	pcb[0].base = 1;
+	pcb[0].vintage = 0;
+
 	//
 	// memset(&pcb[0], 0, sizeof(pcb_t));
 	// pcb[0].pid      = 1;
@@ -255,23 +281,20 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			//Program Counter line and something else
 			//uint32_t address = (ctx->gpr[0]);
 			//ctx->pc = address;
-			current->ctx.cpsr = 0x50;
 			current->ctx.pc   = ctx->gpr[0];
+			pcb[nextFreeSpace].vintage = 0;
+			pcb[nextFreeSpace].base = (int)ctx->gpr[1];
+			pcb[nextFreeSpace].priority = (int)ctx->gpr[1];
+			current->ctx.cpsr = 0x50;
 			//Is this line pointless, Aleena redefines pointless in a profound manner
 			current->ctx.sp   = (uint32_t)(&(tos_userSpace) + ((current->pid) * 0x00001000));
 			memcpy(ctx, &current->ctx, sizeof(ctx_t));
+			PL011_putc( UART0, 'P', true );
+			PL011_putc( UART0, 'r', true );
+			PL011_putc( UART0, 'i', true );
+			PL011_putc( UART0, '0'+pcb[nextFreeSpace].base, true );
+			current = &pcb[nextFreeSpace];
 			break;
-		}
-		case 0x07 : {
-
-			pcb[nextFreeSpace].basePriority	= ctx->gpr[0];
-			PL011_putc( UART0, 'p', true);
-			PL011_putc( UART0, 'r', true);
-			PL011_putc( UART0, 'i', true);
-			PL011_putc( UART0, '0'+ctx->gpr[0], true);
-			//Added this... is that calm?
-			break;
-
 		}
 		//
 		default   : { // 0x?? => unknown/unsupported
