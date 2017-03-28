@@ -63,7 +63,7 @@ void* load( char* x ) {
     int y = atoi( x );
 
     if (y < 0) {
-        puts( "Giving priority 1 as input was not recognised.\n", 47); 
+        puts( "Giving priority 1 as input was not recognised.\n", 47);
         return 1;
 
     }
@@ -81,13 +81,7 @@ void main_console() {
       pid_t pid = fork();
 
       if( 0 == pid ) {
-          // child
-        PL011_putc( UART0, 'c', true );
-        PL011_putc( UART0, 'h', true );
-        PL011_putc( UART0, 'i', true );
-        PL011_putc( UART0, ' ', true );
-        PL011_putc( UART0, '0', true );
-
+        // child
         //Andrew says returning from exec shouldnt return - scary = sorted
         exec( addr );
     } else {
@@ -95,12 +89,6 @@ void main_console() {
         //check pid is right?
         addr = load( strtok( NULL, " " ) );
         int prio = getPriority( strtok( NULL, " " ) );
-        PL011_putc( UART0, 'p', true );
-        PL011_putc( UART0, 'r', true );
-        PL011_putc( UART0, 'i', true );
-        PL011_putc( UART0, '0'+pid, true );
-        PL011_putc( UART0, '0'+prio, true );
-        PL011_putc( UART0, '!', true );
         setpri(pid, prio);
     }
 

@@ -1,7 +1,14 @@
 #include "hilevel.h"
 
 
+//TODO Clear up commenting
+//TODO Unify Spacing and indenting
+//TODO for loops use different integers
+//TODO add a way of printing strings from hilevel.c?
+//TODO Neaten up stack and pc shit and understand it slightly better
+//TODO Give Kill some functionality
 
+//TODO TODO Pipes
 
 /* Define Process Table. taken from lab-3_q, define array of pcb_t instances for use as the process
 table, one entry for each user process, with a pointer into this table
@@ -235,7 +242,7 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			//pcb[nextFreeSpace].ctx.pc   = (uint32_t)(&main_console);
 			//May be a '-'?
 			//* Is the plus 1 nessary... different on exec line i believe so get them the same
-			pcb[nextFreeSpace].ctx.sp   = (uint32_t)(&(tos_userSpace) + ((nextFreeSpace+1) * 0x00001000));
+			pcb[nextFreeSpace].ctx.sp   = (uint32_t)(&(tos_userSpace) + ((nextFreeSpace-1) * 0x00001000));
 			pcb[nextFreeSpace].spaceAvailable = false;
 
 			ctx->gpr[0] = (nextFreeSpace + 1);
@@ -259,7 +266,7 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			current->ctx.pc   = ctx->gpr[0];
 			current->ctx.cpsr = 0x50;
 			//Is this line pointless, Aleena redefines pointless in a profound manner
-			current->ctx.sp   = (uint32_t)(&(tos_userSpace) + ((current->pid) * 0x00001000));
+			current->ctx.sp   = (uint32_t)(&(tos_userSpace) + ((current->pid-2) * 0x00001000));
 			memcpy(ctx, &current->ctx, sizeof(ctx_t));
 			current = &pcb[nextFreeSpace];
 			break;
