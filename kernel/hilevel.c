@@ -3,7 +3,7 @@
 
 
 
-/* Define Process Tabel. taken from lab-3_q, define array of pcb_t instances for use as the process
+/* Define Process Table. taken from lab-3_q, define array of pcb_t instances for use as the process
 table, one entry for each user process, with a pointer into this table
 maintained so it is clear which PCB is active (the process currently
 running)
@@ -13,10 +13,7 @@ running)
 //#define TIMER_PERIOD 0x00100000
 pcb_t pcb[PROCESSORS_MAX], *current = NULL;
 int nextFreeSpace;
-int currentUsedSpace = 0;
-int nextUsedSpace;
-
-
+int currentProcess = 0;
 
 /* Iterate through the pcb and return the index of the first available space in the array */
 int getNextSpace() {
@@ -29,7 +26,7 @@ int getNextSpace() {
 
 // DOES CONSOLE HAVE A PRIORITY?
 int chooseProcess() {
-	PL011_putc( UART0, ' ', true );
+	//PL011_putc( UART0, ' ', true );
 	int max = -1;
 	int max_priority = 0;
 	for (size_t i = 0; i < PROCESSORS_MAX; i++) {
@@ -43,14 +40,14 @@ int chooseProcess() {
 				max_priority = pcb[i].priority;
 			}
 			pcb[i].vintage = pcb[i].vintage + 1;
-			 PL011_putc( UART0, 'P', true );
-			 PL011_putc( UART0, '0'+i, true );
-			 PL011_putc( UART0, '=', true );
-			 PL011_putc( UART0, '0'+pcb[i].priority, true );
+			//  PL011_putc( UART0, 'P', true );
+			//  PL011_putc( UART0, '0'+i, true );
+			//  PL011_putc( UART0, '=', true );
+			//  PL011_putc( UART0, '0'+pcb[i].priority, true );
 		}
 	}
 	pcb[max].vintage = 0;
-	PL011_putc( UART0, ' ', true );
+	//PL011_putc( UART0, ' ', true );
 	return max;
 }
 
@@ -72,30 +69,30 @@ void scheduler (ctx_t* ctx) {
 
 	int nextProcess = chooseProcess();
 	if (nextProcess < 0) {
-		PL011_putc(UART0, '#', true);
+		PL011_putc(UART0, '#', true); //If something has gone wrong
 	}
-	PL011_putc( UART0, '0'+currentUsedSpace, true);
+	PL011_putc( UART0, '0'+currentProcess, true);
 	PL011_putc( UART0, '0'+nextProcess, true);
-	memcpy(&pcb[currentUsedSpace].ctx, ctx, sizeof(ctx_t));
+	memcpy(&pcb[currentProcess].ctx, ctx, sizeof(ctx_t));
 	memcpy(ctx, &pcb[nextProcess].ctx, sizeof(ctx_t)); //restore
 	current = &(pcb[nextProcess]);
-	currentUsedSpace = nextProcess;
+	currentProcess = nextProcess;
 
 
 
 	//Call next one and link round when hitting sizeof&pcb... acll //fork when necessary
 
-		/*for(int i = currentUsedSpace; i < (currentUsedSpace+PROCESSORS_MAX); i++){
+		/*for(int i = currentProcess; i < (currentProcess+PROCESSORS_MAX); i++){
 			//If next space is used, switch to that space
 			if(!(pcb[(i+1)%PROCESSORS_MAX].spaceAvailable)) {
-				PL011_putc( UART0, '0'+currentUsedSpace, true);
+				PL011_putc( UART0, '0'+currentProcess, true);
 				nextUsedSpace = ((i+1)%PROCESSORS_MAX);
 				PL011_putc( UART0, '0'+nextUsedSpace, true);
-				memcpy(&pcb[currentUsedSpace].ctx, ctx, sizeof(ctx_t)); //preserve P3
+				memcpy(&pcb[currentProcess].ctx, ctx, sizeof(ctx_t)); //preserve P3
 				memcpy(ctx, &pcb[nextUsedSpace].ctx, sizeof(ctx_t)); //restore  P3
 				//current = &(pcb[i+1%sizeof(pcb)]);
 				current = &(pcb[nextUsedSpace]);
-				currentUsedSpace=nextUsedSpace;
+				currentProcess=nextUsedSpace;
 				break;
 			}
 		}*/
@@ -155,25 +152,6 @@ void hilevel_handler_rst(ctx_t* ctx) {
 	pcb[0].spaceAvailable = false;
 	pcb[0].base = 1;
 	pcb[0].vintage = 0;
-
-	//
-	// memset(&pcb[0], 0, sizeof(pcb_t));
-	// pcb[0].pid      = 1;
-	// pcb[0].ctx.cpsr = 0x50;
-	// pcb[0].ctx.pc   = (uint32_t)(&main_P3);
-	// pcb[0].ctx.sp   = (uint32_t)(&tos_P3);
-	//
-	// memset(&pcb[1], 0, sizeof(pcb_t));
-	// pcb[1].pid      = 2;
-	// pcb[1].ctx.cpsr = 0x50;
-	// pcb[1].ctx.pc   = (uint32_t)(&main_P4);
-	// pcb[1].ctx.sp   = (uint32_t)(&tos_P4);
-	//
-	// memset(&pcb[2], 0, sizeof(pcb_t));
-	// pcb[2].pid      = 3;
-	// pcb[2].ctx.cpsr = 0x50;
-	// pcb[2].ctx.pc   = (uint32_t)(&main_P5);
-	// pcb[2].ctx.sp   = (uint32_t)(&tos_P5);
 
 	/* Line below then selects a PCB entry (in this case the 0-th entry), and
 	activates it: 'memcpy' copies the execution context to addresses pointed
@@ -256,6 +234,7 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			pcb[nextFreeSpace].ctx.cpsr = 0x50;
 			//pcb[nextFreeSpace].ctx.pc   = (uint32_t)(&main_console);
 			//May be a '-'?
+			//* Is the plus 1 nessary... different on exec line i believe so get them the same
 			pcb[nextFreeSpace].ctx.sp   = (uint32_t)(&(tos_userSpace) + ((nextFreeSpace+1) * 0x00001000));
 			pcb[nextFreeSpace].spaceAvailable = false;
 
@@ -263,60 +242,38 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			pcb[nextFreeSpace].ctx.gpr[0] = 0;
 			break;
 		}
-		case 0x04 : {
-			/* Perform normal termination, invoke call-backs, flush then close
-			open files, pass exit status to parent process (via wait)... in lib.c
-			it takes in int x, assign it to r0, make system call exit then return
+		case 0x04 : { /* 0x04 => exit( int x )
+			When called with argument '1'  set the spaceAvailable to true, so procses is no longer recognised... and calls scheduler so a new process will be automatically selected.
+			Next process will replace and overwrite this one so doesn't require setting everything to 0...
+			* Set argument for if int x isnt 1?
 			*/
-			// it says exit ( EXIT_SUCCESS ) which == 0
-			//Want to return pc to previous Program
-			// * WHY does 0 matter?
 			pcb[nextFreeSpace].spaceAvailable = true;
 			scheduler(ctx);
-
 			break;
 		}
 
-		case 0x05 : {
-			//Program Counter line and something else
-			//uint32_t address = (ctx->gpr[0]);
-			//ctx->pc = address;
+		case 0x05 : { /* 0x05 => exec( const void* x )
+			This is called from the child prgram sets the pc and sp all to new location where child is, copies current context into ctx and set current to this nextFreeSpace
+			* sp line maybe a bit dodge.... not totally sure how all this works
+			*/
 			current->ctx.pc   = ctx->gpr[0];
-			//pcb[nextFreeSpace].vintage = 0;
-			//(int) might be unnessary...
-			//pcb[nextFreeSpace].base = (int)ctx->gpr[1];
-			//pcb[nextFreeSpace].priority = (int)ctx->gpr[1];
 			current->ctx.cpsr = 0x50;
 			//Is this line pointless, Aleena redefines pointless in a profound manner
 			current->ctx.sp   = (uint32_t)(&(tos_userSpace) + ((current->pid) * 0x00001000));
 			memcpy(ctx, &current->ctx, sizeof(ctx_t));
-			// PL011_putc( UART0, 'P', true );
-			// PL011_putc( UART0, 'r', true );
-			// PL011_putc( UART0, 'i', true );
-			// PL011_putc( UART0, '0'+pcb[nextFreeSpace].base, true );
 			current = &pcb[nextFreeSpace];
 			break;
 		}
-		case 0x07 : {
-			//Program Counter line and something else
-			//uint32_t address = (ctx->gpr[0]);
-			//ctx->pc = address;
-			//(int) might be unnessary...
-			PL011_putc( UART0, 'S', true );
-			PL011_putc( UART0, 'E', true );
-			PL011_putc( UART0, 'T', true );
+		case 0x07 : { /* 0x07 => setpri( int pid, int x)
+			This is called from the Parent Process, as the Parent Process calls fork before the child process does... This allows the Parent to set the Child's Priority before it is executed. This means that if a high priority is chosen the process is immediately run and doesn't have to wait for exec to be called.
+			*Really double check that that is the case... as can't remember the situation and why it didn't work before and may have just been a fuck up on my behalf...
+			*/
+
 			pcb[((int)ctx->gpr[0]-1)].vintage = 0;
 			pcb[((int)ctx->gpr[0]-1)].base = (int)ctx->gpr[1];
 			pcb[((int)ctx->gpr[0]-1)].priority = (int)ctx->gpr[1];
 
-			//memcpy(ctx, &current->ctx, sizeof(ctx_t));
-			 PL011_putc( UART0, 'P', true );
-			 PL011_putc( UART0, 'r', true );
-			 PL011_putc( UART0, 'i', true );
-			 PL011_putc( UART0, '0'+((int)ctx->gpr[0]), true );
-			 PL011_putc( UART0, '0'+pcb[((int)ctx->gpr[0]-1)].priority, true );
-
-			 //current = &pcb[nextFreeSpace];
+			//current = &pcb[nextFreeSpace];
 			break;
 		}
 		//

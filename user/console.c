@@ -63,7 +63,9 @@ void* load( char* x ) {
     int y = atoi( x );
 
     if (y < 0) {
+        puts( "Giving priority 1 as input was not recognised.\n", 47); 
         return 1;
+
     }
     else return y;
 }
