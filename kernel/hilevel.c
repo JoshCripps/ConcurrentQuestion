@@ -31,6 +31,8 @@ int getNextSpace() {
 	}
 }
 
+
+
 // DOES CONSOLE HAVE A PRIORITY?
 int chooseProcess() {
 	//PL011_putc( UART0, ' ', true );
@@ -156,6 +158,7 @@ void hilevel_handler_rst(ctx_t* ctx) {
 	pcb[0].ctx.cpsr = 0x50;
 	pcb[0].ctx.pc   = (uint32_t)(&main_console);
 	pcb[0].ctx.sp   = (uint32_t)(&tos_console);
+	pcb[0].topOfStack = (uint32_t)(&tos_console);
 	pcb[0].spaceAvailable = false;
 	pcb[0].base = 1;
 	pcb[0].vintage = 0;
@@ -231,7 +234,7 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			ctx->gpr[ 0 ] = n;
 			break;
 		}
-		case 0x03 : { // 0x04 => fork()
+		case 0x03 : { // 0x03 => fork()
 			nextFreeSpace = getNextSpace();
 
 			//should this be 0? like eventually should be changed no?
@@ -242,11 +245,17 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			//pcb[nextFreeSpace].ctx.pc   = (uint32_t)(&main_console);
 			//May be a '-'?
 			//* Is the plus 1 nessary... different on exec line i believe so get them the same
-			pcb[nextFreeSpace].ctx.sp   = (uint32_t)(&(tos_userSpace) + ((nextFreeSpace-1) * 0x00001000));
-			pcb[nextFreeSpace].spaceAvailable = false;
+			pcb[nextFreeSpace].topOfStack = (uint32_t)(&(tos_userSpace) - ((nextFreeSpace-1) * 0x00001000));
+			uint32_t distance = current->topOfStack - ctx->sp;
+			pcb[nextFreeSpace].ctx.sp = pcb[nextFreeSpace].topOfStack - distance;
+			//Size from address, so sp not topOfStack
+			memcpy((uint32_t*)pcb[nextFreeSpace].ctx.sp, (uint32_t*)ctx->sp, distance);
+
+
 
 			ctx->gpr[0] = (nextFreeSpace + 1);
 			pcb[nextFreeSpace].ctx.gpr[0] = 0;
+			pcb[nextFreeSpace].spaceAvailable = false;
 			break;
 		}
 		case 0x04 : { /* 0x04 => exit( int x )
@@ -254,7 +263,7 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			Next process will replace and overwrite this one so doesn't require setting everything to 0...
 			* Set argument for if int x isnt 1?
 			*/
-			pcb[nextFreeSpace].spaceAvailable = true;
+			current->spaceAvailable = true;
 			scheduler(ctx);
 			break;
 		}
@@ -266,9 +275,9 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			current->ctx.pc   = ctx->gpr[0];
 			current->ctx.cpsr = 0x50;
 			//Is this line pointless, Aleena redefines pointless in a profound manner
-			current->ctx.sp   = (uint32_t)(&(tos_userSpace) + ((current->pid-2) * 0x00001000));
+			current->ctx.sp   = (uint32_t)(&(tos_userSpace) - ((current->pid-2) * 0x00001000));
 			memcpy(ctx, &current->ctx, sizeof(ctx_t));
-			current = &pcb[nextFreeSpace];
+			// current = &pcb[nextFreeSpace];
 			break;
 		}
 		case 0x07 : { /* 0x07 => setpri( int pid, int x)

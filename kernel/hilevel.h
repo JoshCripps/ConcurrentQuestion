@@ -44,6 +44,7 @@ typedef struct {
   uint32_t base;
   uint32_t vintage;
   uint32_t priority;
+  uint32_t topOfStack;
 } pcb_t;
 
 #endif

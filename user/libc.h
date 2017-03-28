@@ -67,4 +67,6 @@ extern int  kill( pid_t pid, int x );
 
 extern void setpri( pid_t pid, int y );
 
+//extern int
+
 #endif

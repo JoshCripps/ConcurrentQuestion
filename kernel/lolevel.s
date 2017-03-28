@@ -8,7 +8,7 @@
 .global lolevel_handler_svc
 
 lolevel_handler_rst: bl    int_init                @ initialise interrupt vector table
-
+                    /*Why D2?*/
                      msr   cpsr, #0xD2             @ enter IRQ mode with IRQ and FIQ interrupts disabled
 
                      ldr   sp, =tos_irq            @ initialise IRQ mode stack
