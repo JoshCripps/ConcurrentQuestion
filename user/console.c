@@ -5,6 +5,7 @@
  * once a carriage return character has been read, or an overall
  * limit reached).
  */
+const void* addr;
 
 
 void puts( char* x, int n ) {
@@ -79,18 +80,27 @@ void main_console() {
 
       if( 0 == pid ) {
           // child
-        void* addr = load( strtok( NULL, " " ) );
+        PL011_putc( UART0, 'c', true );
+        PL011_putc( UART0, 'h', true );
+        PL011_putc( UART0, 'i', true );
+        PL011_putc( UART0, ' ', true );
+        PL011_putc( UART0, '0', true );
+
+        //Andrew says returning from exec shouldnt return - scary = sorted
+        exec( addr );
+    } else {
+    // parent
+        //check pid is right?
+        addr = load( strtok( NULL, " " ) );
         int prio = getPriority( strtok( NULL, " " ) );
-        PL011_putc( UART0, 'P', true );
+        PL011_putc( UART0, 'p', true );
         PL011_putc( UART0, 'r', true );
         PL011_putc( UART0, 'i', true );
+        PL011_putc( UART0, '0'+pid, true );
         PL011_putc( UART0, '0'+prio, true );
-        //Andrew says returning from exec shouldnt return - scary = sorted
-        exec( addr, prio);
-    } //else {
-    //     // parent
-    //     setPriority(pid, prio);
-    //   }
+        PL011_putc( UART0, '!', true );
+        setpri(pid, prio);
+    }
 
 
 }

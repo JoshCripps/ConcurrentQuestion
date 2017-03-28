@@ -30,6 +30,7 @@ typedef int pid_t;
 #define SYS_EXIT      ( 0x04 )
 #define SYS_EXEC      ( 0x05 )
 #define SYS_KILL      ( 0x06 )
+#define SYS_SETPRI    ( 0x07 )
 
 #define SIG_TERM      ( 0x00 )
 #define SIG_QUIT      ( 0x01 )
@@ -59,10 +60,11 @@ extern int  fork();
 // perform exit, i.e., terminate process with status x
 extern void exit(       int   x );
 // perform exec, i.e., start executing program at address x
-extern void exec( const void* x, int y );
-
+extern void exec( const void* x);
 
 // signal process identified by pid with signal x
 extern int  kill( pid_t pid, int x );
+
+extern void setpri( pid_t pid, int y );
 
 #endif

@@ -282,18 +282,41 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			//uint32_t address = (ctx->gpr[0]);
 			//ctx->pc = address;
 			current->ctx.pc   = ctx->gpr[0];
-			pcb[nextFreeSpace].vintage = 0;
-			pcb[nextFreeSpace].base = (int)ctx->gpr[1];
-			pcb[nextFreeSpace].priority = (int)ctx->gpr[1];
+			//pcb[nextFreeSpace].vintage = 0;
+			//(int) might be unnessary...
+			//pcb[nextFreeSpace].base = (int)ctx->gpr[1];
+			//pcb[nextFreeSpace].priority = (int)ctx->gpr[1];
 			current->ctx.cpsr = 0x50;
 			//Is this line pointless, Aleena redefines pointless in a profound manner
 			current->ctx.sp   = (uint32_t)(&(tos_userSpace) + ((current->pid) * 0x00001000));
 			memcpy(ctx, &current->ctx, sizeof(ctx_t));
-			PL011_putc( UART0, 'P', true );
-			PL011_putc( UART0, 'r', true );
-			PL011_putc( UART0, 'i', true );
-			PL011_putc( UART0, '0'+pcb[nextFreeSpace].base, true );
+			// PL011_putc( UART0, 'P', true );
+			// PL011_putc( UART0, 'r', true );
+			// PL011_putc( UART0, 'i', true );
+			// PL011_putc( UART0, '0'+pcb[nextFreeSpace].base, true );
 			current = &pcb[nextFreeSpace];
+			break;
+		}
+		case 0x07 : {
+			//Program Counter line and something else
+			//uint32_t address = (ctx->gpr[0]);
+			//ctx->pc = address;
+			//(int) might be unnessary...
+			PL011_putc( UART0, 'S', true );
+			PL011_putc( UART0, 'E', true );
+			PL011_putc( UART0, 'T', true );
+			pcb[((int)ctx->gpr[0]-1)].vintage = 0;
+			pcb[((int)ctx->gpr[0]-1)].base = (int)ctx->gpr[1];
+			pcb[((int)ctx->gpr[0]-1)].priority = (int)ctx->gpr[1];
+
+			//memcpy(ctx, &current->ctx, sizeof(ctx_t));
+			 PL011_putc( UART0, 'P', true );
+			 PL011_putc( UART0, 'r', true );
+			 PL011_putc( UART0, 'i', true );
+			 PL011_putc( UART0, '0'+((int)ctx->gpr[0]), true );
+			 PL011_putc( UART0, '0'+pcb[((int)ctx->gpr[0]-1)].priority, true );
+
+			 //current = &pcb[nextFreeSpace];
 			break;
 		}
 		//
