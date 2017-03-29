@@ -17,21 +17,14 @@ running)
 * Understand *pointers
 */
 #define PROCESSORS_MAX 17
+#define PIPES_MAX 32
+// Is that excessive?
+#define FD_MAX 1024
 //#define TIMER_PERIOD 0x00100000
 pcb_t pcb[PROCESSORS_MAX], *current = NULL;
+pipe_t pipe[PIPES_MAX];
 int nextFreeSpace;
 int currentProcess = 0;
-
-/* Iterate through the pcb and return the index of the first available space in the array */
-int getNextSpace() {
-	for (int i = 0; i < PROCESSORS_MAX; i++) {
-		if (pcb[i].spaceAvailable) {
-			return i;
-		}
-	}
-}
-
-
 
 // DOES CONSOLE HAVE A PRIORITY?
 int chooseProcess() {
@@ -215,7 +208,7 @@ The second case 0x01 deals with the write call: when one of the user processes i
 * uint32_t id.. is it the id of the current program?
 */
 
-void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
+void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 
 	switch( id ) {
 		case 0x00 : { // 0x00 => yield()
@@ -223,19 +216,60 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			break;
 		}
 		case 0x01 : { // 0x01 => write( fd, x, n )
+			// write n bytes from x to   the file descriptor fd; return bytes written
 			int   fd = ( int   )( ctx->gpr[ 0 ] );
 			char*  x = ( char* )( ctx->gpr[ 1 ] );
 			int    n = ( int   )( ctx->gpr[ 2 ] );
+			if (fd < 3) {
 
-			for( int i = 0; i < n; i++ ) {
-				PL011_putc( UART0, *x++, true );
+				for( int i = 0; i < n; i++ ) {
+					PL011_putc( UART0, *x++, true );
+				}
+			}
+			else {
+				//Get current pipe from pipe descriptor
+				int currentPipe = pcb[currentProcess].fildes[fd].pipeNo;
+				for( int i = 0; i < n; i++ ) {
+					PL011_putc((pipe[currentPipe].buffer[i]), *x++, true );
+				}
+			}
+			//Give back n to show how many bytes were written
+			ctx->gpr[ 0 ] = n;
+			break;
+		}
+		case 0x02 : { // 0x03 => read( fd, x, n)
+			// read  n bytes into x from the file descriptor fd; return bytes read
+			int   fd = ( int   )( ctx->gpr[ 0 ] );
+			char*  x = ( char* )( ctx->gpr[ 1 ] );
+			int    n = ( int   )( ctx->gpr[ 2 ] );
+			if (fd < 3) {
+				for( int i = 0; i < n; i++ ) {
+					*x++ = PL011_getc( UART0, true );
+				}
+			}
+			else {
+				//Get current pipe from pipe descriptor
+				int currentPipe = pcb[currentProcess].fildes[fd].pipeNo;
+				for( int i = 0; i < n; i++ ) {
+					*x++ = PL011_getc((pipe[currentPipe].buffer[i]), true );
+				}
 			}
 
 			ctx->gpr[ 0 ] = n;
 			break;
+
 		}
 		case 0x03 : { // 0x03 => fork()
-			nextFreeSpace = getNextSpace();
+
+			/* Iterate through the pcb and set nextFreeSpacehe first available space in the array */
+			// THIS MIGHT BE INCORRECT
+			int nextFreeSpace;
+			for (int i = 0; i < PROCESSORS_MAX; i++) {
+				if (pcb[i].spaceAvailable) {
+					nextFreeSpace = i;
+					break;
+				}
+			}
 
 			//should this be 0? like eventually should be changed no?
 			memset(&pcb[nextFreeSpace], 0, sizeof(pcb_t));
@@ -250,8 +284,6 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			pcb[nextFreeSpace].ctx.sp = pcb[nextFreeSpace].topOfStack - distance;
 			//Size from address, so sp not topOfStack
 			memcpy((uint32_t*)pcb[nextFreeSpace].ctx.sp, (uint32_t*)ctx->sp, distance);
-
-
 
 			ctx->gpr[0] = (nextFreeSpace + 1);
 			pcb[nextFreeSpace].ctx.gpr[0] = 0;
@@ -292,7 +324,60 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id) {
 			//current = &pcb[nextFreeSpace];
 			break;
 		}
-		//
+		case 0x08 : { /* 0x08 => pipes( int fd[2] ) */
+			// Make pipe
+			// Remember pipe index
+			// 2 file descriptor in current process, both point to pipe one is read, one is write
+			// Fd starts from 3
+
+
+			//THINK THIS IS DONE?
+			int nextPipe;
+
+			for (int i = 0; i < PIPES_MAX; i++) {
+				if (!pipe[i].pipeActive) {
+					nextPipe = i;
+					break;
+				}
+			}
+
+			pipe[nextPipe].pipeActive = true;
+			pipe[nextPipe].noChars = 0;
+
+
+					// READĸ─
+			bool doneRead = false;
+			for (int j = 3; j < FD_MAX; j++) {
+				// Iterates though and creates two File Descriptors at next available space
+				if (!(current->fildes[j].fdActive)) {
+					if (doneRead) {
+
+						// fd[1] = j;
+						ctx->gpr[1] = j;
+						current->fildes[j].pipeNo = nextPipe;
+						current->fildes[j].isRead = false;
+						current->fildes[j].fdActive = true;
+						break;
+					} else {
+						// fd[0] = j;
+						ctx->gpr[0] = j;
+						current->fildes[j].pipeNo = nextPipe;
+						current->fildes[j].isRead = true;
+						current->fildes[j].fdActive = true;
+						doneRead = true;
+
+					}
+				}
+
+			}
+			if(!(current->fildes[FD_MAX].fdActive)) {
+				ctx->gpr[0] = -1;
+				PL011_putc( UART0, '#', true );
+			} else {
+				ctx->gpr[0] = 0;
+			}
+			break;
+		}
 		default   : { // 0x?? => unknown/unsupported
 			break;
 		}

@@ -83,6 +83,7 @@ void main_console() {
       if( 0 == pid ) {
         // child
         //Andrew says returning from exec shouldnt return - scary = sorted
+        //pipe(int fd[2]);
         exec( addr );
     } else {
     // parent

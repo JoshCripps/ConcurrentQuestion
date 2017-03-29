@@ -33,6 +33,19 @@
 
 typedef int pid_t;
 
+// For file descriptors*
+typedef struct {
+    uint32_t pipeNo;
+    bool isRead;
+    bool fdActive;
+} fildes_t;
+
+typedef struct {
+    bool pipeActive;
+    char buffer[1024];
+    int noChars;
+} pipe_t;
+
 typedef struct {
   uint32_t cpsr, pc, gpr[ 13 ], sp, lr;
 } ctx_t;
@@ -40,6 +53,7 @@ typedef struct {
 typedef struct {
   pid_t pid;
   ctx_t ctx;
+  fildes_t fildes[1024];
   bool spaceAvailable;
   uint32_t base;
   uint32_t vintage;
