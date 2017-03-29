@@ -18,6 +18,7 @@ running)
 */
 #define PROCESSORS_MAX 17
 #define PIPES_MAX 32
+#define BUFFER_MAX 1024
 // Is that excessive?
 #define FD_MAX 1024
 //#define TIMER_PERIOD 0x00100000
@@ -53,6 +54,7 @@ int chooseProcess() {
 	return max;
 }
 
+
 /* Scheduler function (algorithm). Currently special purpose for 3 user
 programs. It checks which process is active, and performs a context
 switch to suspend it and resume the next one in a simple round-robin
@@ -72,6 +74,7 @@ void scheduler (ctx_t* ctx) {
 	int nextProcess = chooseProcess();
 	if (nextProcess < 0) {
 		PL011_putc(UART0, '#', true); //If something has gone wrong
+		PL011_putc(UART0, 'S', true); //If something has gone wrong
 	}
 	PL011_putc( UART0, '0'+currentProcess, true);
 	PL011_putc( UART0, '0'+nextProcess, true);
@@ -192,6 +195,17 @@ void hilevel_handler_irq(ctx_t* ctx) {
 	return;
 }
 
+//Returns either the no. of chars requested or amount of chars in buffer... Whichever is less
+int minNoChars(int buflim, int n) {
+	if (buflim < n) {
+		n = buflim;
+		// TODO change this if too frequent
+		PL011_putc( UART0, '#', true );
+		PL011_putc( UART0, 'R', true );
+	}
+	return n;
+}
+
 /* 'hilevel_handler_svc' is invoked by 'lolevel_handler_svc' every time a reset
 interrupt is raised and needs to be handled. Recall that it is passed two
 arguments:
@@ -225,17 +239,31 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 				for( int i = 0; i < n; i++ ) {
 					PL011_putc( UART0, *x++, true );
 				}
+				//Give back n to show how many bytes were written
+				ctx->gpr[ 0 ] = n;
 			}
 			else {
 				//Get current pipe from pipe descriptor
 				int currentPipe = pcb[currentProcess].fildes[fd].pipeNo;
-				for( int i = 0; i < n; i++ ) {
-					PL011_putc((pipe[currentPipe].buffer[i]), *x++, true );
+				// no. of chars to write
+				int n1  = n;
+				// no. of chars to left in buffer
+				int numleft = (BUFFER_MAX - pipe[currentPipe].noChars);
+				// If writing more than is left in buffer...
+				if (n1 > numleft) {
+					// Only write as much as possible and "#W"
+					n1 = numleft;
+					PL011_putc( UART0, '#', true );
+					PL011_putc( UART0, 'W', true );
 				}
+				memcpy((pipe[currentPipe].buffer[n1]), x, n1);
+				// Update number of chars in buffer
+				pipe[currentPipe].noChars = (pipe[currentPipe].noChars + n1);
+				//Give back n to show how many bytes were written
+				ctx->gpr[ 0 ] = n1;
 			}
-			//Give back n to show how many bytes were written
-			ctx->gpr[ 0 ] = n;
 			break;
+
 		}
 		case 0x02 : { // 0x03 => read( fd, x, n)
 			// read  n bytes into x from the file descriptor fd; return bytes read
@@ -246,16 +274,23 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 				for( int i = 0; i < n; i++ ) {
 					*x++ = PL011_getc( UART0, true );
 				}
+				ctx->gpr[ 0 ] = n;
 			}
 			else {
+
+				// * Double check about & on memcpy with pointers
 				//Get current pipe from pipe descriptor
 				int currentPipe = pcb[currentProcess].fildes[fd].pipeNo;
-				for( int i = 0; i < n; i++ ) {
-					*x++ = PL011_getc((pipe[currentPipe].buffer[i]), true );
-				}
+				//Ensure chars requested are smaller than amount in buffer, or just take as many as there is
+				int n2 = minNoChars(pipe[currentPipe].noChars, n);
+				//copy from buffer to x
+				memcpy(x, (pipe[currentPipe].buffer), n2);
+				//Move chars down the buffer
+				memcpy((pipe[currentPipe].buffer[0]), (pipe[currentPipe].buffer[n2]), pipe[currentPipe].noChars);
+				//Update no. of chars
+				pipe[currentPipe].noChars = (pipe[currentPipe].noChars - n2);
+				ctx->gpr[ 0 ] = n2;
 			}
-
-			ctx->gpr[ 0 ] = n;
 			break;
 
 		}
@@ -370,9 +405,11 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 				}
 
 			}
-			if(!(current->fildes[FD_MAX].fdActive)) {
+			if((current->fildes[FD_MAX].fdActive)) {
 				ctx->gpr[0] = -1;
 				PL011_putc( UART0, '#', true );
+				PL011_putc( UART0, 'F', true );
+
 			} else {
 				ctx->gpr[0] = 0;
 			}

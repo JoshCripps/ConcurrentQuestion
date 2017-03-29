@@ -40,9 +40,11 @@ typedef struct {
     bool fdActive;
 } fildes_t;
 
+// TODO: Set buffer[1024] to buffer[BUFFER_MAX] somehow
+
 typedef struct {
     bool pipeActive;
-    char buffer[1024];
+    char* buffer[1024];
     int noChars;
 } pipe_t;
 

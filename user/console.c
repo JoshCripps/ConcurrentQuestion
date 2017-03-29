@@ -71,6 +71,7 @@ void* load( char* x ) {
 }
 
 void main_console() {
+    int* fd[2];
   char* p, x[ 1024 ];
   PL011_putc( UART0, 'c', true );
 
@@ -83,7 +84,7 @@ void main_console() {
       if( 0 == pid ) {
         // child
         //Andrew says returning from exec shouldnt return - scary = sorted
-        //pipe(int fd[2]);
+        pipes(fd[2]);
         exec( addr );
     } else {
     // parent
