@@ -145,11 +145,10 @@ int pipes( int fd[2] ) {
   int r;
 
     asm volatile( "mov r0, %2 \n" // assign r0 =  fd[0]
-                  "mov r1, %3 \n" // assign r1 =  fd[1]
                   "svc %1     \n" // make system call SYS_PIPES
                   "mov %0, r0 \n" // assign r0 =    r
                   : "=r" (r)
-                  : "I" (SYS_PIPES), "r" (fd[0]), "r" (fd[1])
-                  : "r0", "r1" );
+                  : "I" (SYS_PIPES), "r" (fd)
+                  : "r0");
     return r;
 }

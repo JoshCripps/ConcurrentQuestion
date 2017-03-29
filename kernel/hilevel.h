@@ -42,9 +42,11 @@ typedef struct {
 
 // TODO: Set buffer[1024] to buffer[BUFFER_MAX] somehow
 
+#define BUFFER_MAX 1024
 typedef struct {
+    int pipeID;
     bool pipeActive;
-    char* buffer[1024];
+    char* buffer[BUFFER_MAX];
     int noChars;
 } pipe_t;
 

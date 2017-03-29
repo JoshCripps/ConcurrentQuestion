@@ -7,8 +7,13 @@
 //TODO add a way of printing strings from hilevel.c?
 //TODO Neaten up stack and pc shit and understand it slightly better
 //TODO Give Kill some functionality
+//TODO Reset occurs if you input like "fork P3m 4"
 
-//TODO TODO Pipes
+// TODO BLocking
+// TODO Blocking Queues
+// TODO Closing Pipes
+// TODO Dining Philsophers
+// TODO Pipes not take negative values
 
 /* Define Process Table. taken from lab-3_q, define array of pcb_t instances for use as the process
 table, one entry for each user process, with a pointer into this table
@@ -18,7 +23,7 @@ running)
 */
 #define PROCESSORS_MAX 17
 #define PIPES_MAX 32
-#define BUFFER_MAX 1024
+
 // Is that excessive?
 #define FD_MAX 1024
 //#define TIMER_PERIOD 0x00100000
@@ -201,7 +206,7 @@ int minNoChars(int buflim, int n) {
 		n = buflim;
 		// TODO change this if too frequent
 		PL011_putc( UART0, '#', true );
-		PL011_putc( UART0, 'R', true );
+		PL011_putc( UART0, 'r', true );
 	}
 	return n;
 }
@@ -244,21 +249,27 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 			}
 			else {
 				//Get current pipe from pipe descriptor
-				int currentPipe = pcb[currentProcess].fildes[fd].pipeNo;
+				int currentPipe = current->fildes[fd].pipeNo - 1;
+				PL011_putc( UART0, 'N', true );
+				PL011_putc( UART0, '0'+currentPipe, true );
 				// no. of chars to write
 				int n1  = n;
-				// no. of chars to left in buffer
-				int numleft = (BUFFER_MAX - pipe[currentPipe].noChars);
+				// no. of chars in buffer
+				int numChar = pipe[currentPipe].noChars;
+				// space left in buffer
+				int spaceLeft = (BUFFER_MAX - numChar);
 				// If writing more than is left in buffer...
-				if (n1 > numleft) {
-					// Only write as much as possible and "#W"
-					n1 = numleft;
+				if (n1 > spaceLeft) {
+					// Only write as much as possible and "#W" - THAT ISNT LEGIT I DONT THINK
+					//n1 = spaceLeft;
 					PL011_putc( UART0, '#', true );
 					PL011_putc( UART0, 'W', true );
+					ctx->gpr[ 0 ] = -1;
+					break;
 				}
-				memcpy((pipe[currentPipe].buffer[n1]), x, n1);
+				memcpy(&(pipe[currentPipe].buffer[numChar]), x, n1);
 				// Update number of chars in buffer
-				pipe[currentPipe].noChars = (pipe[currentPipe].noChars + n1);
+				pipe[currentPipe].noChars = (numChar + n1);
 				//Give back n to show how many bytes were written
 				ctx->gpr[ 0 ] = n1;
 			}
@@ -280,15 +291,24 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 
 				// * Double check about & on memcpy with pointers
 				//Get current pipe from pipe descriptor
-				int currentPipe = pcb[currentProcess].fildes[fd].pipeNo;
+
+				int currentPipe = current->fildes[fd].pipeNo - 1;
+				// PL011_putc( UART0, 'N', true );
+				// PL011_putc( UART0, '0'+currentPipe, true );
 				//Ensure chars requested are smaller than amount in buffer, or just take as many as there is
 				int n2 = minNoChars(pipe[currentPipe].noChars, n);
+				if (n2 < 0 ) {
+					PL011_putc( UART0, '#', true );
+					PL011_putc( UART0, 'R', true );
+					ctx->gpr[ 0 ] = -1;
+
+				}
 				//copy from buffer to x
-				memcpy(x, (pipe[currentPipe].buffer), n2);
-				//Move chars down the buffer
-				memcpy((pipe[currentPipe].buffer[0]), (pipe[currentPipe].buffer[n2]), pipe[currentPipe].noChars);
+				memcpy(x, &(pipe[currentPipe].buffer[0]), n2);
 				//Update no. of chars
 				pipe[currentPipe].noChars = (pipe[currentPipe].noChars - n2);
+				//Move chars down the buffer
+				memcpy(&(pipe[currentPipe].buffer[0]), &(pipe[currentPipe].buffer[n2]), pipe[currentPipe].noChars);
 				ctx->gpr[ 0 ] = n2;
 			}
 			break;
@@ -368,44 +388,57 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 
 			//THINK THIS IS DONE?
 			int nextPipe;
+			int* fd = (int*)ctx->gpr[0];
 
 			for (int i = 0; i < PIPES_MAX; i++) {
 				if (!pipe[i].pipeActive) {
 					nextPipe = i;
 					break;
 				}
+				if (i ==PIPES_MAX-1) {
+					ctx->gpr[0] = -1;
+					PL011_putc( UART0, '#', true );
+					PL011_putc( UART0, 'P', true );
+					return;
+				}
 			}
 
 			pipe[nextPipe].pipeActive = true;
 			pipe[nextPipe].noChars = 0;
+			pipe[nextPipe].pipeID = nextPipe + 1;
 
-
-					// READĸ─
 			bool doneRead = false;
+			bool doneBoth = false;
 			for (int j = 3; j < FD_MAX; j++) {
 				// Iterates though and creates two File Descriptors at next available space
 				if (!(current->fildes[j].fdActive)) {
 					if (doneRead) {
+						//WRITE
+						fd[1] = j;
+						//ctx->gpr[1] = j;
+						current->fildes[j].pipeNo = nextPipe+1;
 
-						// fd[1] = j;
-						ctx->gpr[1] = j;
-						current->fildes[j].pipeNo = nextPipe;
 						current->fildes[j].isRead = false;
 						current->fildes[j].fdActive = true;
+						doneBoth = true;
 						break;
 					} else {
-						// fd[0] = j;
-						ctx->gpr[0] = j;
-						current->fildes[j].pipeNo = nextPipe;
+						//READ
+						fd[0] = j;
+						//ctx->gpr[0] = j;
+						current->fildes[j].pipeNo = nextPipe+1;
+
 						current->fildes[j].isRead = true;
 						current->fildes[j].fdActive = true;
 						doneRead = true;
 
 					}
+
+
 				}
 
 			}
-			if((current->fildes[FD_MAX].fdActive)) {
+			if(!doneBoth) {
 				ctx->gpr[0] = -1;
 				PL011_putc( UART0, '#', true );
 				PL011_putc( UART0, 'F', true );
