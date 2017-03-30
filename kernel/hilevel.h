@@ -59,7 +59,7 @@ typedef struct {
   pid_t pid;
   ctx_t ctx;
   fildes_t fildes[1024];
-  bool spaceAvailable;
+  bool alive;
   uint32_t base;
   uint32_t vintage;
   uint32_t priority;
