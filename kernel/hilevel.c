@@ -9,9 +9,10 @@
 //TODO Give Kill some functionality
 //TODO Reset occurs if you input like "fork P3m 4"
 
-// TODO BLocking
+// TODO BLocking works def correctly?
 // TODO Blocking Queues
 // TODO Closing Pipes
+// TODO IPC as in cross process communication...
 // TODO Dining Philsophers
 // TODO Pipes not take negative values
 
@@ -23,13 +24,12 @@ running)
 */
 #define PROCESSORS_MAX 17
 #define PIPES_MAX 32
-
-// Is that excessive?
 #define FD_MAX 1024
-//#define TIMER_PERIOD 0x00100000
+#define TIMER_PERIOD 0x00100000
 pcb_t pcb[PROCESSORS_MAX], *current = NULL;
 pipe_t pipe[PIPES_MAX];
-int nextFreeSpace;
+int nextFreeSpace
+// TODO check if this necessary
 int currentProcess = 0;
 
 // DOES CONSOLE HAVE A PRIORITY?
@@ -92,22 +92,22 @@ void scheduler (ctx_t* ctx) {
 
 	//Call next one and link round when hitting sizeof&pcb... acll //fork when necessary
 
-		/*for(int i = currentProcess; i < (currentProcess+PROCESSORS_MAX); i++){
-			//If next space is used, switch to that space
-			if(!(pcb[(i+1)%PROCESSORS_MAX].spaceAvailable)) {
-				PL011_putc( UART0, '0'+currentProcess, true);
-				nextUsedSpace = ((i+1)%PROCESSORS_MAX);
-				PL011_putc( UART0, '0'+nextUsedSpace, true);
-				memcpy(&pcb[currentProcess].ctx, ctx, sizeof(ctx_t)); //preserve P3
-				memcpy(ctx, &pcb[nextUsedSpace].ctx, sizeof(ctx_t)); //restore  P3
-				//current = &(pcb[i+1%sizeof(pcb)]);
-				current = &(pcb[nextUsedSpace]);
-				currentProcess=nextUsedSpace;
-				break;
-			}
-		}*/
+	/*for(int i = currentProcess; i < (currentProcess+PROCESSORS_MAX); i++){
+	//If next space is used, switch to that space
+	if(!(pcb[(i+1)%PROCESSORS_MAX].spaceAvailable)) {
+	PL011_putc( UART0, '0'+currentProcess, true);
+	nextUsedSpace = ((i+1)%PROCESSORS_MAX);
+	PL011_putc( UART0, '0'+nextUsedSpace, true);
+	memcpy(&pcb[currentProcess].ctx, ctx, sizeof(ctx_t)); //preserve P3
+	memcpy(ctx, &pcb[nextUsedSpace].ctx, sizeof(ctx_t)); //restore  P3
+	//current = &(pcb[i+1%sizeof(pcb)]);
+	current = &(pcb[nextUsedSpace]);
+	currentProcess=nextUsedSpace;
+	break;
+}
+}*/
 
-	return;
+return;
 }
 
 /* These are the main function for each user program
@@ -135,7 +135,7 @@ void hilevel_handler_rst(ctx_t* ctx) {
 
 	// Timer stuff
 
-	TIMER0->Timer1Load  = 0x00100000; // select period = 2^20 ticks ~= 1 sec
+	TIMER0->Timer1Load  = TIMER_PERIOD; // select period = 2^20 ticks ~= 1 sec
 	TIMER0->Timer1Ctrl  = 0x00000002; // select 32-bit   timer
 	TIMER0->Timer1Ctrl |= 0x00000040; // select periodic timer
 	TIMER0->Timer1Ctrl |= 0x00000020; // enable          timer interrupt
@@ -306,9 +306,9 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 				//copy from buffer to x
 				memcpy(x, &(pipe[currentPipe].buffer[0]), n2);
 				//Update no. of chars
-				pipe[currentPipe].noChars = (pipe[currentPipe].noChars - n2);
 				//Move chars down the buffer
-				memcpy(&(pipe[currentPipe].buffer[0]), &(pipe[currentPipe].buffer[n2]), pipe[currentPipe].noChars);
+				memcpy(&(pipe[currentPipe].buffer[0]), &(pipe[currentPipe].buffer[n2]), n2);
+				pipe[currentPipe].noChars = (pipe[currentPipe].noChars - n2);
 				ctx->gpr[ 0 ] = n2;
 			}
 			break;
@@ -405,6 +405,7 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 
 			pipe[nextPipe].pipeActive = true;
 			pipe[nextPipe].noChars = 0;
+			pipe[nextPipe].noFds = 0;
 			pipe[nextPipe].pipeID = nextPipe + 1;
 
 			bool doneRead = false;
@@ -420,6 +421,7 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 
 						current->fildes[j].isRead = false;
 						current->fildes[j].fdActive = true;
+						pipe[nextPipe].noFds = pipe[nextPipe].noFds + 1;
 						doneBoth = true;
 						break;
 					} else {
@@ -427,9 +429,9 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 						fd[0] = j;
 						//ctx->gpr[0] = j;
 						current->fildes[j].pipeNo = nextPipe+1;
-
 						current->fildes[j].isRead = true;
 						current->fildes[j].fdActive = true;
+						pipe[nextPipe].noFds = pipe[nextPipe].noFds + 1;
 						doneRead = true;
 
 					}
@@ -446,6 +448,59 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 			} else {
 				ctx->gpr[0] = 0;
 			}
+			break;
+		}
+		case 0x09 : {
+			//Take in file descriptor Understand which one it is...
+			// Remove that file descriptor
+			// '-' no of file desccriptors left
+			// Unactivate pipe when done
+			int fd = (int)ctx->gpr[0];
+
+			int pipeToClose = current->fildes[fd].pipeNo - 1;
+			// PL011_putc( UART0, 'p', true );
+			// PL011_putc( UART0, 'i', true );
+			// PL011_putc( UART0, 'p', true );
+			// PL011_putc( UART0, 'e', true );
+			// PL011_putc( UART0, '0'+current->fildes[fd].pipeNo, true );
+			if (!current->fildes[fd].fdActive) {
+				PL011_putc( UART0, '#', true );
+				PL011_putc( UART0, 'N', true );
+				PL011_putc( UART0, 'O', true );
+				PL011_putc( UART0, 'F', true );
+				PL011_putc( UART0, 'D', true );
+				ctx->gpr[0] = -1;
+
+			}
+			else {
+				current->fildes[fd].fdActive = false;
+				fd = 0;
+				int numberOfFds = 0;
+				for (int j = 3; j < FD_MAX; j++) {
+					if ((current->fildes[j].fdActive)) {
+						numberOfFds = numberOfFds + 1;
+					}
+				}
+				pipe[pipeToClose].noFds = numberOfFds;
+				if (pipe[pipeToClose].noFds == 0) {
+					pipe[pipeToClose].pipeActive = false;
+					PL011_putc( UART0, 'C', true );
+					PL011_putc( UART0, 'h', true );
+					PL011_putc( UART0, '0'+pipe[pipeToClose].noChars, true );
+					// FIX THIS LINE
+					memcpy(pipe[pipeToClose].buffer[0], 0, 1024/*sizeof(pipe[pipeToClose].buffer[pipe[pipeToClose].noChars])*/);
+					pipe[pipeToClose].noChars = 0;
+					pipe[pipeToClose].pipeID = 0;
+					PL011_putc( UART0, 'P', true );
+					PL011_putc( UART0, 'i', true );
+					PL011_putc( UART0, 'C', true );
+					PL011_putc( UART0, 'l', true );
+					PL011_putc( UART0, 's', true );
+					PL011_putc( UART0, 'd', true );
+				}
+				ctx->gpr[0] = 0;
+			}
+
 			break;
 		}
 		default   : { // 0x?? => unknown/unsupported

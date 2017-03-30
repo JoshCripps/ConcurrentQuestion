@@ -152,3 +152,15 @@ int pipes( int fd[2] ) {
                   : "r0");
     return r;
 }
+
+int close( int fd ) {
+int r;
+
+  asm volatile( "mov r0, %2 \n" // assign r0 =  fd
+                "svc %1     \n" // make system call SYS_CLOSE
+                "mov %0, r0 \n" // assign r0 =    r
+                : "=r" (r)
+                : "I" (SYS_CLOSE), "r" (fd)
+                : "r0");
+  return r;
+}

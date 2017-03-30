@@ -48,6 +48,7 @@ typedef struct {
     bool pipeActive;
     char* buffer[BUFFER_MAX];
     int noChars;
+    int noFds;
 } pipe_t;
 
 typedef struct {
