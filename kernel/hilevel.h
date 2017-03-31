@@ -33,20 +33,19 @@
 
 typedef int pid_t;
 
-// For file descriptors*
+// For file descriptors
 typedef struct {
     uint32_t pipeNo;
     bool isRead;
     bool fdActive;
 } fildes_t;
 
-// TODO: Set buffer[1024] to buffer[BUFFER_MAX] somehow
-
+// for Pipe
 #define BUFFER_MAX 1024
 typedef struct {
     int pipeID;
     bool pipeActive;
-    char* buffer[BUFFER_MAX];
+    char buffer[BUFFER_MAX];
     int noChars;
     int noFds;
 } pipe_t;

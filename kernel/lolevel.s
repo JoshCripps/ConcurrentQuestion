@@ -8,8 +8,8 @@
 .global lolevel_handler_svc
 
 lolevel_handler_rst: bl    int_init                @ initialise interrupt vector table
-                    /*Why D2?*/
-                     msr   cpsr, #0xD2             @ enter IRQ mode 
+
+                     msr   cpsr, #0xD2             @ enter IRQ mode
 
                      ldr   sp, =tos_irq            @ initialise IRQ mode stack
 
@@ -19,31 +19,14 @@ lolevel_handler_rst: bl    int_init                @ initialise interrupt vector
 
                      sub   sp, sp, #68             @Intialise dummy content
 
-
-                     /* Added this line */
                      mov   r0, sp                  @ set    high-level C function arg. = SP
                      bl    hilevel_handler_rst     @ invoke high-level C function
-                     /* Remove this line?? */
-                     /* b     .                       @ halt */
 
-                     /* Added from lab3 */
                      ldmia sp!, { r0, lr }         @ load   USR mode PC and CPSR
                      msr   spsr, r0                @ set    USR mode        CPSR
                      ldmia sp, { r0-r12, sp, lr }^ @ load   USR mode registers
                      add   sp, sp, #60             @ update SVC mode SP
                      movs  pc, lr                  @ return from interrupt
-
-
-/* Original Function */
-/*
-lolevel_handler_irq: sub   lr, lr, #4              @ correct return address
-                  stmfd sp!, { r0-r3, ip, lr }  @ save    caller-save registers
-
-                  bl    hilevel_handler_irq     @ invoke high-level C function
-
-                  ldmfd sp!, { r0-r3, ip, lr }  @ restore caller-save registers
-                  movs  pc, lr                  @ return from interrupt
-*/
 
 lolevel_handler_irq:  sub   lr, lr, #4              @ correct return address
                     sub   sp, sp, #60             @ update SVC mode stack

@@ -237,11 +237,9 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 				ctx->gpr[ 0 ] = n2; // Return number of bytes read
 			}
 			break;
-
 		}
 		case 0x03 : { // 0x03 => fork()
-			/* Iterate through the pcb and set nextFreeSpacehe first available space in the array */
-			// THIS MIGHT BE INCORRECT
+			/* Iterate through the pcb and set nextFreeSpace to the next !alive process */
 			int nextFreeSpace;
 			for (int i = 0; i < PROCESSORS_MAX; i++) {
 				if (!pcb[i].alive) {
@@ -249,112 +247,93 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 					break;
 				}
 			}
+			memset(&pcb[nextFreeSpace], 0, sizeof(pcb_t)); // Set space to 0
+			memcpy(&pcb[nextFreeSpace].ctx, ctx, sizeof(ctx_t)); // Copy ctx
+			pcb[nextFreeSpace].pid      = nextFreeSpace+1; // Set Pid
+			pcb[nextFreeSpace].ctx.cpsr = 0x50; // USR mode
+			pcb[nextFreeSpace].topOfStack = (uint32_t)(&(tos_userSpace) - ((nextFreeSpace-1) * 0x00001000)); // '-' as stack goes downwards
+			uint32_t distance = current->topOfStack - ctx->sp; // Distance to calculate how much to memcpy
+			pcb[nextFreeSpace].ctx.sp = pcb[nextFreeSpace].topOfStack - distance; // Set stack pointer to point at bottom of memory stack
+			memcpy((uint32_t*)pcb[nextFreeSpace].ctx.sp, (uint32_t*)ctx->sp, distance); // Size from address, so that sp not topOfStack
 
-			//should this be 0? like eventually should be changed no?
-			memset(&pcb[nextFreeSpace], 0, sizeof(pcb_t));
-			memcpy(&pcb[nextFreeSpace].ctx, ctx, sizeof(ctx_t)); //Preservey
-			pcb[nextFreeSpace].pid      = nextFreeSpace+1;
-			pcb[nextFreeSpace].ctx.cpsr = 0x50;
-			//pcb[nextFreeSpace].ctx.pc   = (uint32_t)(&main_console);
-			//May be a '-'?
-			//* Is the plus 1 nessary... different on exec line i believe so get them the same
-			pcb[nextFreeSpace].topOfStack = (uint32_t)(&(tos_userSpace) - ((nextFreeSpace-1) * 0x00001000));
-			uint32_t distance = current->topOfStack - ctx->sp;
-			pcb[nextFreeSpace].ctx.sp = pcb[nextFreeSpace].topOfStack - distance;
-			//Size from address, so sp not topOfStack
-			memcpy((uint32_t*)pcb[nextFreeSpace].ctx.sp, (uint32_t*)ctx->sp, distance);
-
-			ctx->gpr[0] = (nextFreeSpace + 1);
-			pcb[nextFreeSpace].ctx.gpr[0] = 0;
-			pcb[nextFreeSpace].alive = true;
+			ctx->gpr[0] = (nextFreeSpace + 1); // Set parent's return pid to that of childs
+			pcb[nextFreeSpace].ctx.gpr[0] = 0; // Set child's return pid to 0
+			pcb[nextFreeSpace].alive = true; // Set program to alive
 			break;
 		}
-		case 0x04 : { /* 0x04 => exit( int x )
-			When called with argument '1'  set the alive to true, so procses is no longer recognised... and calls scheduler so a new process will be automatically selected.
-			Next process will replace and overwrite this one so doesn't require setting everything to 0...
-			* Set argument for if int x isnt 1?
-			*/
-			current->alive = false;
-			scheduler(ctx);
+		case 0x04 : { // 0x04 => exit( int x )
+			/* Exit a process, the next process will replace and overwrite this one so doesn't require setting everything to 0... (in fork) */
+			int success = (int)ctx->gpr[0];
+			if (success == 0) { // When called with argument '0'
+				current->alive = false; // Set alive to false
+				scheduler(ctx); // Call scheduler to choose next process
+			}
+			else { // If exit is called with an argument that is != 0
+				PL011_putc( UART0, '#', true ); // Raise '#X' for failure
+				PL011_putc( UART0, 'X', true );
+				PL011_putc( UART0, '0'+success, true );
+			}
 			break;
 		}
 
-		case 0x05 : { /* 0x05 => exec( const void* x )
-			This is called from the child prgram sets the pc and sp all to new location where child is, copies current context into ctx and set current to this nextFreeSpace
-			* sp line maybe a bit dodge.... not totally sure how all this works
-			*/
+		case 0x05 : { // 0x05 => exec( const void* x )
+			/* This is called from the child prgram sets the pc and sp all to new location where child is, copies current context into ctx and set current to this nextFreeSpace */
 			current->ctx.pc   = ctx->gpr[0];
 			current->ctx.cpsr = 0x50;
-			//Is this line pointless, Aleena redefines pointless in a profound manner
 			current->ctx.sp   = (uint32_t)(&(tos_userSpace) - ((current->pid-2) * 0x00001000));
 			memcpy(ctx, &current->ctx, sizeof(ctx_t));
-			// current = &pcb[nextFreeSpace];
+			// TODO do i need this current = &pcb[nextFreeSpace];
 			break;
 		}
-		case 0x07 : { /* 0x07 => setpri( int pid, int x)
-			This is called from the Parent Process, as the Parent Process calls fork before the child process does... This allows the Parent to set the Child's Priority before it is executed. This means that if a high priority is chosen the process is immediately run and doesn't have to wait for exec to be called.
-			*Really double check that that is the case... as can't remember the situation and why it didn't work before and may have just been a fuck up on my behalf...
-			*/
-
-			pcb[((int)ctx->gpr[0]-1)].vintage = 0;
-			pcb[((int)ctx->gpr[0]-1)].base = (int)ctx->gpr[1];
+		case 0x07 : { // 0x07 => setpri( int pid, int x)
+			/* This is called from the Parent Process, as the Parent Process calls fork before the child process does... This allows the Parent to set the Child's Priority before it is executed. This means that if a high priority is chosen the process is immediately run and doesn't have to wait for exec to be called. */
+			pcb[((int)ctx->gpr[0]-1)].vintage = 0; // Process's age since last execution
+			pcb[((int)ctx->gpr[0]-1)].base = (int)ctx->gpr[1]; // Base priority
 			pcb[((int)ctx->gpr[0]-1)].priority = (int)ctx->gpr[1];
-
-			//current = &pcb[nextFreeSpace];
 			break;
 		}
-		case 0x08 : { /* 0x08 => pipes( int fd[2] ) */
-			// Make pipe
-			// Remember pipe index
-			// 2 file descriptor in current process, both point to pipe one is read, one is write
-			// Fd starts from 3
-
-
-			//THINK THIS IS DONE?
+		case 0x08 : { // 0x08 => pipes( int fd[2] )
+			/* Make Pipe, take in Fd's and return them once completed and pointing towards correct pipe */
 			int nextPipe;
-			int* fd = (int*)ctx->gpr[0];
-
+			int* fd = (int*)ctx->gpr[0]; // Take in File Descriptors
 			for (int i = 0; i < PIPES_MAX; i++) {
 				if (!pipe[i].pipeActive) {
-					nextPipe = i;
+					nextPipe = i; // Select next non active pipe as NextPipe
 					break;
 				}
-				if (i ==PIPES_MAX-1) {
+				if (i == PIPES_MAX-1) { // If no more pipes available
 					ctx->gpr[0] = -1;
 					PL011_putc( UART0, '#', true );
 					PL011_putc( UART0, 'P', true );
 					return;
 				}
 			}
-
-			pipe[nextPipe].pipeActive = true;
-			pipe[nextPipe].noChars = 0;
-			pipe[nextPipe].noFds = 0;
-			pipe[nextPipe].pipeID = nextPipe + 1;
-
+			pipe[nextPipe].pipeActive = true; // Set pipe as Active
+			pipe[nextPipe].noChars = 0; // Pipe begins with no chars in buffer
+			pipe[nextPipe].noFds = 0; // Pipe begins with no File Descriptors pointing towards it
+			pipe[nextPipe].pipeID = nextPipe + 1; // Pipe Id is 1 for first pipe similar to that of process ID
 			bool doneRead = false;
 			bool doneBoth = false;
 			for (int j = 3; j < FD_MAX; j++) {
 				// Iterates though and creates two File Descriptors at next available space
 				if (!(current->fildes[j].fdActive)) {
 					if (doneRead) {
-						//WRITE
+						// Write File Descriptor
 						fd[1] = j;
-						//ctx->gpr[1] = j;
-						current->fildes[j].pipeNo = nextPipe+1;
-
-						current->fildes[j].isRead = false;
-						current->fildes[j].fdActive = true;
+						current->fildes[j].pipeNo = nextPipe+1; // FD's pipe
+						current->fildes[j].isRead = false; // FD is write
+						current->fildes[j].fdActive = true; // FD is now active
+						// Increase number of Fd's pointing to pipe
 						pipe[nextPipe].noFds = pipe[nextPipe].noFds + 1;
 						doneBoth = true;
 						break;
 					} else {
-						//READ
+						// Read File Descriptor
 						fd[0] = j;
-						//ctx->gpr[0] = j;
-						current->fildes[j].pipeNo = nextPipe+1;
-						current->fildes[j].isRead = true;
-						current->fildes[j].fdActive = true;
+						current->fildes[j].pipeNo = nextPipe+1; // FD's pipe
+						current->fildes[j].isRead = true; // FD is read
+						current->fildes[j].fdActive = true; // FD is now active
+						// Increase number of Fd's pointing to pipe
 						pipe[nextPipe].noFds = pipe[nextPipe].noFds + 1;
 						doneRead = true;
 
@@ -364,73 +343,62 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 				}
 
 			}
-			if(!doneBoth) {
+			if(!doneBoth) { // If Fd havent been intialised properly
 				ctx->gpr[0] = -1;
 				PL011_putc( UART0, '#', true );
 				PL011_putc( UART0, 'F', true );
 
-			} else {
+			} else { // Return FDs
 				ctx->gpr[0] = 0;
 			}
 			break;
 		}
-		case 0x09 : {
-			//Take in file descriptor Understand which one it is...
-			// Remove that file descriptor
-			// '-' no of file desccriptors left
-			// Unactivate pipe when done
-			int fd = (int)ctx->gpr[0];
-
+		case 0x09 : { // 0x09 => close( int fd )
+			/* Take in file descriptor to be removed, remove it, and update number of Fds attached to the specific pipe. Once all Fds are removed from pipe, set pipe to inactive and memset the buffer of the pipe to 0 */
+			int fd = (int)ctx->gpr[0]; // Take in Fd from SYS_CLOSE
 			int pipeToClose = current->fildes[fd].pipeNo - 1;
-			// PL011_putc( UART0, 'p', true );
-			// PL011_putc( UART0, 'i', true );
-			// PL011_putc( UART0, 'p', true );
-			// PL011_putc( UART0, 'e', true );
-			// PL011_putc( UART0, '0'+current->fildes[fd].pipeNo, true );
-			if (!current->fildes[fd].fdActive) {
+			if (!current->fildes[fd].fdActive) { // If Fd is not found
 				PL011_putc( UART0, '#', true );
 				PL011_putc( UART0, 'N', true );
 				PL011_putc( UART0, 'O', true );
 				PL011_putc( UART0, 'F', true );
 				PL011_putc( UART0, 'D', true );
-				ctx->gpr[0] = -1;
-
+				ctx->gpr[0] = -1; // Return -1 to show unsuccessful
 			}
 			else {
-				current->fildes[fd].fdActive = false;
-				fd = 0;
+				current->fildes[fd].fdActive = false; // Set it to inactive
+				fd = 0; // Set it to 0
 				int numberOfFds = 0;
 				for (int j = 3; j < FD_MAX; j++) {
 					if ((current->fildes[j].fdActive)) {
+						// Recalculate number of Fds associted with pipe
 						numberOfFds = numberOfFds + 1;
 					}
 				}
-				pipe[pipeToClose].noFds = numberOfFds;
-				if (pipe[pipeToClose].noFds == 0) {
-					pipe[pipeToClose].pipeActive = false;
+				pipe[pipeToClose].noFds = numberOfFds; // Update pipe struct
+				if (pipe[pipeToClose].noFds == 0) { // If no more Fds...
+					pipe[pipeToClose].pipeActive = false; // Close Pipe
 					PL011_putc( UART0, 'C', true );
 					PL011_putc( UART0, 'h', true );
 					PL011_putc( UART0, '0'+pipe[pipeToClose].noChars, true );
-					// FIX THIS LINE
-					memcpy(pipe[pipeToClose].buffer[0], 0, 1024/*sizeof(pipe[pipeToClose].buffer[pipe[pipeToClose].noChars])*/);
-					pipe[pipeToClose].noChars = 0;
-					pipe[pipeToClose].pipeID = 0;
-					PL011_putc( UART0, 'P', true );
+					// Set buffer back to 0s
+					memset(&(pipe[pipeToClose].buffer[0]), 0, 1024);
+					pipe[pipeToClose].noChars = 0; // Set number of chars to 0
+					pipe[pipeToClose].pipeID = 0; // Set Pipe ID back to 0
+					PL011_putc( UART0, 'P', true ); // Success of Closing Pipe
 					PL011_putc( UART0, 'i', true );
 					PL011_putc( UART0, 'C', true );
 					PL011_putc( UART0, 'l', true );
 					PL011_putc( UART0, 's', true );
 					PL011_putc( UART0, 'd', true );
 				}
-				ctx->gpr[0] = 0;
+				ctx->gpr[0] = 0; // Success of Removing Fd
 			}
-
 			break;
 		}
 		default   : { // 0x?? => unknown/unsupported
 			break;
 		}
 	}
-
 	return;
 }
