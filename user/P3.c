@@ -13,8 +13,6 @@ int is_prime( uint32_t x ) {
 
     return 1;
 }
-
-
 void main_P3() {
 
     for( int i = 0; i < 50; i++ ) {

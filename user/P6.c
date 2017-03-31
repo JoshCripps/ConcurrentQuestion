@@ -15,6 +15,8 @@ int is_prime2( uint32_t x ) {
 }
 
 
+extern void main_P7();
+
 void main_P6() {
     bool readSuccessful = false;
     bool writeSuccessful = false;
@@ -24,49 +26,40 @@ void main_P6() {
     if (pipes(fd) < 0) {
         write( STDOUT_FILENO, "#NO MORE PIPES", 14 );
     }
+    pid_t pid = fork();
+
+    if( 0 == pid ) {
+        // child
+        //Andrew says returning from exec shouldnt return - scary = sorted
+        exec( &main_P7 );
+    }
     else {
-        while (!readSuccessful || !writeSuccessful) {
-            for( int i = 0; i < 50; i++ ) {
-                write( STDOUT_FILENO, "P6", 2 );
+
+        for( int i = 0; i < 50; i++ ) {
+            write( STDOUT_FILENO, "P6", 2 );
 
 
-                uint32_t lo = 1 <<  8;
-                uint32_t hi = 1 << 16;
+            uint32_t lo = 1 <<  8;
+            uint32_t hi = 1 << 16;
 
-                for( uint32_t x = lo; x < hi; x++ ) {
-                    int r = is_prime2( x );
-                }
-            }
-
-            for (int a = 0; a < 450; a++) {
-                char yay[100];
-                int n = write( fd[1], "abcde", 5);
-                write( STDOUT_FILENO, "Wtn.. ", 6 );
-                if (n < 0 ) {
-                    write( STDOUT_FILENO, "#NO MORE SPACE ON PIPE, YIELDING. ", 34 );
-                    yield();
-                    //continue;
-                }
-                else { writeSuccessful = true; }
-                if (a%2 == 0) {
-                    int m = read( fd[0], yay, 5);
-                    if (m < 0) {
-                        write( STDOUT_FILENO, "#NOTHING ON PIPE, YIELDING. ", 28 );
-                        yield();
-                        //continue;
-                    }
-                    else { readSuccessful = true; }
-                    write( STDOUT_FILENO, "Rdn: ", 5 );
-                    write( STDOUT_FILENO, yay, m );
-                    write( STDOUT_FILENO, " ", 1 );
-                }
-            }
-            for (int i = 0; i < 2; i++) {
-                close( fd[i] );
+            for( uint32_t x = lo; x < hi; x++ ) {
+                int r = is_prime2( x );
             }
         }
 
-
-        exit( EXIT_SUCCESS );
+        for (int a = 0; a < 50; a++) {
+            int n = write( fd[1], "abcde", 5);
+            write( STDOUT_FILENO, "Wtn.. ", 6 );
+            if (n < 0 ) {
+                write( STDOUT_FILENO, "#NO MORE SPACE ON PIPE, YIELDING. ", 34 );
+                yield();
+            }
+        }
+        /*for (int i = 0; i < 2; i++) {
+            close( fd[i] );
+        }*/
     }
+
+
+    exit( EXIT_SUCCESS );
 }

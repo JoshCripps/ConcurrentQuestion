@@ -256,6 +256,15 @@ void hilevel_handler_svc(ctx_t* ctx, uint32_t id, fildes_t* fildes) {
 			pcb[nextFreeSpace].ctx.sp = pcb[nextFreeSpace].topOfStack - distance; // Set stack pointer to point at bottom of memory stack
 			memcpy((uint32_t*)pcb[nextFreeSpace].ctx.sp, (uint32_t*)ctx->sp, distance); // Size from address, so that sp not topOfStack
 
+			// Copies FDs from fork
+			for (int j = 3; j < FD_MAX; j++) {
+				if ((current->fildes[j].fdActive)) {
+					pcb[nextFreeSpace].fildes[j] = current->fildes[j];
+				}
+			}
+			// Copies Priority if one is available
+			pcb[nextFreeSpace].base = current->base-1;
+
 			ctx->gpr[0] = (nextFreeSpace + 1); // Set parent's return pid to that of childs
 			pcb[nextFreeSpace].ctx.gpr[0] = 0; // Set child's return pid to 0
 			pcb[nextFreeSpace].alive = true; // Set program to alive
